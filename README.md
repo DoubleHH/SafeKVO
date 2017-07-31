@@ -1,9 +1,9 @@
 # SafeKVO
 A category to use KVO in a safe way~
 
-# 关于KVO的那些事 -- KVO简单实现与安全用法
+# 关于KVO的那些事 -- KVO安全用法封装
 
-`KVO (Key Value Observering)` 是iOS用于监听某个对象某个变量的一种方便，使用的机制。但是，对于KVO的稳定性苹果却做得没有那么好，在以下三种情况下会无情Crash：
+`KVO (Key Value Observering)` 是iOS用于监听某个对象某个变量一种简洁便利的机制。但是，对于KVO的稳定性苹果却做得没有那么好，在以下三种情况下会无情Crash：
 
 1. 监听者`dealloc`时，监听关系还存在。当监听值发生变化时，会给监听者的野指针发送消息，报野指针Crash。（猜测底层是保存了`unsafe_unretained`指向监听者的指针）；
 2. 被监听者`dealloc`时，监听关系还存在。在监听者内存free掉后，直接会报监听者还存在监听关系而Crash；
@@ -11,7 +11,7 @@ A category to use KVO in a safe way~
 
 ![](http://i.niupic.com/images/2017/07/31/e0988M.jpeg)
 
-我们考虑到KVO带来的伤害，平时十分小心翼翼在工程内使用KVO，甚至能不用的时候就不用。不甘心将如此好用的机制沦为带刺的玫瑰，让我们为KVO塑造"黄金铠甲"。
+我们考虑到KVO带来的伤害，平时十分小心翼翼在工程内使用KVO，甚至能不用的时候就不用。但我们不甘心将如此好用的机制沦为带刺玫瑰-----为KVO打造"紫金铠甲"。
 
 根据崩溃类型，我们的目标也有三个：
 
@@ -29,13 +29,13 @@ A category to use KVO in a safe way~
 2. listener（监听者）不知道listened（被监听者）们是谁？
 3. listener不知道listened的keypath有哪些？
 
-第一个问题的解决方案是 关联对象。当一个对象释放时，会进行以下三个步骤：第一步，销毁对象的所有属性及实例变量，第二部，移除对象上的所有关联对象；第三步，移除所有对该对象的weak引用。
+第一个问题的解决方案是 关联对象。当一个对象释放时，会进行以下三个步骤：第一步，销毁对象的所有属性及实例变量，第二步，移除对象上的所有关联对象；第三步，移除所有对该对象的weak引用。
 
 ![KVO Crash三类](http://i.niupic.com/images/2017/07/27/YwsD1r.png)
 
 关联对象的释放是在listener `dealloc`过程的第二个步骤当中，此时对象并没有完全释放。因此，我们可以给listener添加一个关联对象解决第一个问题。
 
-根据第一个问题解决方案，第二和第三个问题也不难想出。同样，我们可用关联对象保存监听者和keypath数组解决。但我们不这么做，为了让 listener 看起来更加干净，也为了让逻辑更加清晰，可将监听者和keypath作为第一个关联对象的实例变量。而且为了不强引用监听者，监听者是`weak`保存的。另外，为了全权管理listener对listened的行为，将监听行为转给这个关联对象，关联对象收到监听消息再转递给listener。至此，我们成这个关联对象为代理者proxy。
+根据第一个问题解决方案，第二和第三个解决方案也不难想出。同样地，我们可用关联对象保存监听者和keypath数组实现。但我们不想这么做，为了让 listener 看起来更加干净，也为了让逻辑更加清晰，可将监听者和keypath作为第一个关联对象的实例变量。而且为了不强引用监听者，监听者是`weak`保存的。另外，为了全权管理listener对listened的行为，我们将监听行为转给这个关联对象，关联对象收到监听消息再转递给listener。至此，我们称这个关联对象为代理者（proxy）。
 
 最终，listener，listened，proxy三者关系及监听者移除监听过程如下：
 
@@ -50,7 +50,7 @@ A category to use KVO in a safe way~
 #### 添加过程
 
 1. 添加监听时，listener取出对listened的关联对象proxy（没有就创建，并建立新的监听关系和转发关系），并且proxy保存了listener和listened的weak属性；
-2. 如果keypath在proxy保存中，说明已经监听过了，不需要再监听。<strong>此时解决了我们第三大类的移除次数大于监听次数的crash</strong>。如不在keypath中，则添加keypath到keypath容器中，并建立对于新的keypath的监听关系；
+2. 如果keypath在proxy保存中，说明已经监听过了，不需要再监听。此时解决了我们第三大类的移除次数大于监听次数的crash。如不在keypath中，则添加keypath到keypath容器中，并建立对于新的keypath的监听关系；
 
 #### `dealloc`过程
 
@@ -77,9 +77,9 @@ listener `dealloc`，触发proxy的`dealloc`，proxy根据保存的keypath信息
 
 为什么要用`__unsafe_unretained`保存listened，而不是`weak`？
 
-原因是若使用`weak`，在LDL `dealloc` 的过程中，指针获取到的值已经为`nil`了（在proxy保存的listened也一样），拿不到我们要用的对象指针，那么好奇的包包又会问了这又是为什么呢？这是因为每次使用`weak`变量时，最终会调用`id objc_loadWeakRetained(id *)`方法，方法发现当前对象如果在`dealloc`过程中就会直接返回`nil`。所以，我们这里使用了`__unsafe_unretained`指针来保有对象的指针，既能一直访问到对象，又不会影响对象的引用计数。
+原因是若使用`weak`，在LDL `dealloc` 的过程中，指针获取到的值已经为`nil`了（在proxy保存的listened也一样），拿不到我们要用的对象指针，那么好奇的宝宝又会问了：这又是为什么呢？这是因为每次使用`weak`变量时，最终会调用`id objc_loadWeakRetained(id *)`方法，方法发现当前对象如果在`dealloc`过程中就会直接返回`nil`。所以，我们这里使用了`__unsafe_unretained`指针来保有对象的指针，既能一直访问到对象，又不会影响对象的引用计数。
 
-第二个问题，`NSHashTable` 容器保存proxy，`NSHashTable`类似于数组，但它可以保存任何指针，而且可以有各种方法存储他们，比如，`retain, weak, copy...`。目的就是保存监听关系proxy列表，而且弱引用他们。这种特殊容器平时开发用的很少，想了解更多关于这些特殊容器的，[请点这里](http://nshipster.cn/nshashtable-and-nsmaptable/)
+第二个问题，`NSHashTable` 容器保存proxy，`NSHashTable`类似于数组，但它可以保存任何指针，而且可以有各种方法存储他们，比如，`retain, weak, copy...`。而我们这里使用的目的是保存监听关系proxy列表，而且弱引用他们。这种特殊容器平时开发用的很少，想了解更多关于这些特殊容器的，[请点这里](http://nshipster.cn/nshashtable-and-nsmaptable/)
 
 ## 用法
 
@@ -87,7 +87,7 @@ listener `dealloc`，触发proxy的`dealloc`，proxy根据保存的keypath信息
 
 ![](http://i.niupic.com/images/2017/08/01/OMicMn.png)
 
-## 总结
+# 总结
 
 本文从KVO三种类型的Crash进行分析，使用了代理模式做转发，用关联对象监听`dealloc`时机，使用`__unsafe_unretained`来持有不会增加引用计数但一直保有对象的指针，使用了不常见的`NSHashTable`来弱持有代理，最终实现了健壮的KVO，减少了KVO系统实现的问题导致的不愉快的使用体验，让更多人感受到使用KVO机制带来的幸福感。
 
