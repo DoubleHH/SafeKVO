@@ -7,9 +7,10 @@
 //
 
 /**
- Fix KVO's crash. You just [NSObject removeObserver:forKeyPath:context] and
- do not need removeObserver. This implementation will auto remove observer
- when observer or observered object dealloc.
+ Fix KVO's crashes. 
+ You can [NSObject wm_addObserver:forKeyPath:context] repeatedly and
+ do not worry about removeObserver. This implementation will auto
+ removeObserver when observer or observered object dealloc.
  
  KVO crash in three situations:
  1. The time of calling [NSObject removeObserver:forKeyPath:context] 
